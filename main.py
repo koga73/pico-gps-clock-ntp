@@ -4,13 +4,15 @@ import machine
 from machine import Pin
 
 from src.display import Display
+from src.gps import GPS
 from src.wifi import wlan_reset, wlan_scan, wlan_ap, wlan_connect
 from src.server import web_server, handle_request_gateway, handle_request_status
 
 AP_SSID = "rpi_pico_2"
 AP_PASS = None
 
-display = Display(Pin(16), Pin(17), Pin("LED", Pin.OUT))
+display = Display(Pin(18), Pin(19), Pin("LED", Pin.OUT))
+gps = GPS()
 
 # region MODE_DEFAULT
 async def mode_default(wlan):
@@ -58,10 +60,15 @@ async def main():
     # Add delay to allow for stopping the program if needed
     await asyncio.sleep_ms(2000)
 
+    # Start display loop
     asyncio.create_task(display.loop())
     display.show("----")
 
+    # Reset wlan interfaces
     await wlan_reset()
+
+    # Start gps loop
+    asyncio.create_task(gps.loop())
 
     try:
         with open("wifi.txt", "r") as f:
