@@ -10,8 +10,11 @@ class Display(object):
     def __init__(self, clk, dio, led):
         self.delay = _DELAY
         self.loops = -1
+        self.colon = False
+
         self.text = " " * _DIGITS
         self.index = 0
+        
         self.display = TM1637(clk=clk, dio=dio)
         self.led = led
 
@@ -39,11 +42,12 @@ class Display(object):
         while (self.loops > 0):
             await asyncio.sleep_ms(self.delay)
 
-    def show(self, txt, delay = _DELAY, loops = -1):
+    def show(self, txt, delay = _DELAY, loops = -1, colon = False):
         self.delay = delay
         self.loops = loops
-        self.index = 0
+        self.colon = colon
 
+        self.index = 0
         if (len(txt) > _DIGITS):
             # Add spaces to beginning and end to create a gap
             buffer1 = " " * (_DIGITS - 1)
@@ -55,8 +59,8 @@ class Display(object):
         
         self._show_current()
     
-    async def show_async(self, txt, delay = _DELAY, loops = -1):
-        self.show(txt, delay, loops)
+    async def show_async(self, txt, delay = _DELAY, loops = -1, colon = False):
+        self.show(txt, delay, loops, colon)
 
         # Wait for loops to finish
         if (self.loops > 0):
@@ -67,7 +71,7 @@ class Display(object):
         current = self.text[self.index : self.index + _DIGITS]
         current = f"{{:<{_DIGITS}}}".format(current)
 
-        self.display.show(current)
+        self.display.show(current, self.colon)
         
         # LED
         led_on = False

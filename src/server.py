@@ -1,9 +1,8 @@
 import asyncio
-import json
-import re
 import machine
+import re
 
-MAX_CLIENTS = 3
+from src.filesystem import wifi_write, settings_write
 
 # region HTTP_STATUS
 STATUS_OK = "HTTP/1.0 200 OK\r\nContent-type: text/html\r\n\r\n"
@@ -29,7 +28,6 @@ async def web_server(request_handler):
         "0.0.0.0",
         80
     )
-#endregion
 
 async def handle_client(reader, writer, request_handler):
     request = await reader.read(1024)
@@ -48,6 +46,7 @@ async def handle_client(reader, writer, request_handler):
         await asyncio.sleep_ms(1000)
         print("Rebooting...")
         machine.soft_reset()
+#endregion
 
 # region ROUTES_GATEWAY
 async def handle_request_gateway(request, template_data):
@@ -92,10 +91,7 @@ async def handle_request_gateway(request, template_data):
             return response, False
         
         # Write wifi credentials to file
-        wifi = {"ssid":param_ssid, "password":param_password}
-        print("\n", wifi)
-        with open("wifi.txt", "w") as f:
-            f.write(json.dumps(wifi))
+        wifi_write(param_ssid, param_password)
 
         # Return HTML
         title = template_data["title"]
@@ -120,14 +116,59 @@ async def handle_request_status(request, template_data):
     # GET /
     if (path == "/"):
         title = template_data["title"]
+        satellites = template_data["satellites"]
+        timestamp = template_data["timestamp"]
+        lat = template_data["lat"]
+        lon = template_data["lon"]
         
         with open("static/status/index.html", "r") as f:
+            html = f.read()
+        html = html.replace("{TITLE}", title)
+        html = html.replace("{SATELLITES}", satellites)
+        html = html.replace("{TIMESTAMP}", timestamp)
+        html = html.replace("{LAT}", lat)
+        html = html.replace("{LON}", lon)
+        html = html.replace("{IP_ADDRESS}", template_data["ip"])
+
+        response = STATUS_OK
+        response += html
+        return response, False
+    
+    # POST /update
+    elif (path == "/update"):
+        # Parse params from body
+        body = _get_body(request)
+        param_format_24hr = _get_param(body, "format24hr")
+        param_tz = _get_param(body, "tz")
+        param_dst = _get_param(body, "dst")
+
+        # Ensure required params are present
+        if (param_tz == None or param_dst == None):
+            response = STATUS_BAD_REQUEST
+            response += "Missing required parameters"
+            return response, False
+        # Validate params
+        if (not bool(re.search(r"^[0-9\-]+$", str(param_tz)))):
+            response = STATUS_BAD_REQUEST
+            response += "Invalid tz"
+            return response, False
+        if (not bool(re.search(r"^(none|us|uk|au)$", str(param_dst)))):
+            response = STATUS_BAD_REQUEST
+            response += "Invalid dst"
+            return response, False
+        
+        # Write settings to file
+        settings_write(param_format_24hr, int(param_tz), param_dst)
+
+        # Return HTML
+        title = template_data["title"]
+        with open("static/status/update.html", "r") as f:
             html = f.read()
         html = html.replace("{TITLE}", title)
 
         response = STATUS_OK
         response += html
-        return response, False
+        return response, True
     
     # Default
     else:
@@ -158,7 +199,12 @@ def _get_param(str, param):
     if (keyval == None):
         return None
     if ("=" in keyval):
-        return _url_decode(keyval.split("=")[1])
+        val = _url_decode(keyval.split("=")[1])
+        if (val == "true"):
+            return True
+        elif (val == "false"):
+            return False
+        return val
     else:
         return True
 

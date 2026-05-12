@@ -31,10 +31,132 @@
 				margin-bottom:24px;
 				font-size:2em;
 			}
+			section {
+				margin-bottom:24px;
+			}
+
+			dl {
+				display:grid;
+				grid-template-columns:1fr 2fr;
+				margin:12px 0;
+				border-top:1px solid #ccc;
+				border-left:1px solid #ccc;
+			}
+			dd, dt {
+				padding: 8px;
+				border-right:1px solid #ccc;
+				border-bottom:1px solid #ccc;
+				background:#f8f8f8;
+			}
+
+			label {
+				font-size:0.875em;
+			}
+			select, input {
+				box-sizing:border-box;
+				padding:8px;
+				width:100%;
+				margin-top:4px;
+				background:#fff;
+				border:1px solid #ccc;
+				border-radius:3px;
+			}
+			input[type="checkbox"]{
+				display:block;
+				padding:0;
+				margin:0;
+			}
+			input[type="checkbox"] + label {
+				cursor:pointer;
+				text-wrap:nowrap;
+			}
+			input[type="checkbox"]:checked + label {
+				font-weight:bold;
+			}
+			button {
+				appearance:none;
+				padding:8px 12px;
+				background:#0080FF;
+				color:#f0f0f0;
+				border-radius:3px;
+				cursor:pointer;
+				margin:8px 0;
+				text-transform: uppercase;
+			}
+			
+			.grp {
+				margin:16px 0;
+			}
+			.grp-chk {
+				display:flex;
+				align-items:flex-start;
+				justify-content: center;
+				gap:8px;
+				width:fit-content;
+			}
 		</style>
 	</head>
 	<body>
 		<h1>{TITLE}</h1>
-		<p>Satellites: {SATELLITES}</p>
+
+		<section id="status">
+			<h2>Status</h2>
+			<dl>
+				<dt>Satellites</dt>
+				<dd>{SATELLITES}</dd>
+	
+				<dt>Time</dt>
+				<dd>{TIMESTAMP}</dd>
+	
+				<dt>Latitude</dt>
+				<dd>{LAT}</dd>
+				<dt>Longitude</dt>
+				<dd>{LON}</dd>
+			</dl>
+		</section>
+
+		<section id="options">
+			<h2>Options</h2>
+			<form action="http://{IP_ADDRESS}/update" method="POST">
+
+				<div class="grp grp-chk">
+					<input type="checkbox" id="chkFormat" name="format24hr"/>
+					<label for="chkFormat">Use 24-hour format</label>
+				</div>
+
+				<div class="grp">
+					<label for="sltTZ">Timezone:</label>
+					<select id="sltTZ" name="tz" required>
+						<option value="-10">(GMT-10:00) Pacific/Honolulu</option>
+						<option value="-8">(GMT-08:00) America/Anchorage</option>
+						<option value="-7">(GMT-07:00) America/Los_Angeles</option>
+						<option value="-6">(GMT-06:00) America/Denver</option>
+						<option value="-5">(GMT-05:00) America/Chicago</option>
+						<option value="-4">(GMT-04:00) America/New_York</option>
+						<option value="-3">(GMT-03:00) America/Sao_Paulo</option>
+						<option value="0" selected>(GMT+00:00) UTC</option>
+						<option value="1">(GMT+01:00) Europe/London</option>
+						<option value="2">(GMT+02:00) Europe/Paris</option>
+						<option value="3">(GMT+03:00) Africa/Cairo</option>
+						<option value="4">(GMT+04:00) Asia/Dubai</option>
+						<option value="9">(GMT+09:00) Asia/Tokyo</option>
+						<option value="10">(GMT+10:00) Australia/Sydney</option>
+						<option value="12">(GMT+12:00) Pacific/Auckland</option>
+					</select>
+				</div>
+				
+				<div class="grp">
+					<label for="sltDST">Daylight savings:</label>
+					<select id="sltDST" name="dst" required>
+						<option value="none" selected>NONE</option>
+						<option value="us">US/CA</option>
+						<option value="uk">UK/EU</option>
+						<option value="au">AU</option>
+					</select>
+				</div>
+
+				<button type="submit">Update</button>
+			</form>
+		</section>
 	</body>
 </html>
