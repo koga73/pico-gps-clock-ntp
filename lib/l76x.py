@@ -1,28 +1,13 @@
 from machine import Pin
-import math
 import time
 
-import l76_config
+from l76_config import L76_Config 
 import micropyGPS as Parser
 
 Temp = '0123456789ABCDEF*'
-BUFFSIZE = 1100
-
-pi = 3.14159265358979324
-a = 6378245.0
-ee = 0.00669342162296594323
-x_pi = 3.14159265358979324 * 3000.0 / 180.0
 
 class L76X(object):
-    Lon = 0.0
-    Lat = 0.0
-    Lon_area = 'E'
-    Lat_area = 'W'
-    Satellites = 0
-    Lon_Baidu = 0.0
-    Lat_Baidu = 0.0
-    Lon_Goodle = 0.0
-    Lat_Goodle = 0.0
+    Last_Updated = 0
 
     Time_Year = 0
     Time_Month = 0
@@ -32,9 +17,11 @@ class L76X(object):
     Time_Seconds = 0
     Time_Microseconds = 0
     Timestamp = "" # "0000-00-00 00:00:00.0" # Unix format
+
+    Lon = 0.0
+    Lat = 0.0
     
-    GPS_Lon = 0
-    GPS_Lat = 0
+    Satellites = 0
     
     #Startup mode
     SET_HOT_START       = '$PMTK101'
@@ -85,7 +72,7 @@ class L76X(object):
     SET_NMEA_BAUDRATE_4800     = '$PMTK251,4800'
 
     def __init__(self):
-        self.config = l76_config.config(9600)
+        self.config = L76_Config(9600)
         self.parser = Parser.MicropyGPS()
     
     def L76X_Send_Command(self, data):
@@ -99,7 +86,8 @@ class L76X(object):
         self.config.Uart_SendByte('\r')
         self.config.Uart_SendByte('\n')
         # print(data)
-        
+    
+    # Read from GPS UART, parse and update time
     def L76X_Loop(self):
         raw_data = self.config.Uart_ReceiveAll()
         if raw_data is None:
@@ -116,6 +104,11 @@ class L76X(object):
         seconds = int(s[0])
         microseconds = int(s[1] if len(s) > 1 else "0")
 
+        # Ensure timestamp has changed
+        if (year + 2000, month, day, hours, minutes, seconds, microseconds) == (self.Time_Year, self.Time_Month, self.Time_Day, self.Time_Hours, self.Time_Minutes, self.Time_Seconds, self.Time_Microseconds):
+            return
+        
+        self.Last_Updated = time.ticks_ms()
         self.Time_Year = year + 2000 # GPS returns year as 2 digit format
         self.Time_Month = month
         self.Time_Day = day
@@ -133,6 +126,10 @@ class L76X(object):
         self.Satellites = self.parser.satellites_in_use
     
     def _timestamp(self, year, month, day, hours, minutes, seconds, microseconds = 0):
+        # Ensure we have date
+        if (year == 0 and month == 0 and day == 0):
+            return ""
+        
         # Pad with leading zero if needed
         year = "20{:02d}".format(year)
         month = "{:02d}".format(month)
@@ -143,54 +140,6 @@ class L76X(object):
 
         return f"{year}-{month}-{day} {hours}:{minutes}:{seconds}.{microseconds}"
 
-    def transformLat(self, x, y):
-        ret = -100.0 + 2.0 * x + 3.0 * y + 0.2 * y * y + 0.1 * x * y + 0.2 *math.sqrt(abs(x))
-        ret += (20.0 * math.sin(6.0 * x * pi) + 20.0 * math.sin(2.0 * x * pi)) * 2.0 / 3.0
-        ret += (20.0 * math.sin(y * pi) + 40.0 * math.sin(y / 3.0 * pi)) * 2.0 / 3.0
-        ret += (160.0 * math.sin(y / 12.0 * pi) + 320 * math.sin(y * pi / 30.0)) * 2.0 / 3.0
-        return ret
-
-    def transformLon(self, x, y):
-        ret = 300.0 + x + 2.0 * y + 0.1 * x * x + 0.1 * x * y + 0.1 * math.sqrt(abs(x))
-        ret += (20.0 * math.sin(6.0 * x * pi) + 20.0 * math.sin(2.0 * x * pi)) * 2.0 / 3.0
-        ret += (20.0 * math.sin(x * pi) + 40.0 * math.sin(x / 3.0 * pi)) * 2.0 / 3.0
-        ret += (150.0 * math.sin(x / 12.0 * pi) + 300.0 * math.sin(x / 30.0 * pi)) * 2.0 / 3.0
-        return ret
-
-    def bd_encrypt(self):
-        x = self.Lon_Goodle
-        y = self.Lat_Goodle
-        z = math.sqrt(x * x + y * y) + 0.00002 * math.sin(y * x_pi)
-        theta = math.atan2(y, x) + 0.000003 * math.cos(x * x_pi)
-        self.Lon_Baidu = z * math.cos(theta) + 0.0065
-        self.Lat_Baidu = z * math.sin(theta) + 0.006
-    
-    def transform(self):
-        dLat = self.transformLat(self.GPS_Lon - 105.0, self.GPS_Lat - 35.0)
-        dLon = self.transformLon(self.GPS_Lon - 105.0, self.GPS_Lat - 35.0)
-        radLat = self.GPS_Lat / 180.0 * pi
-        magic = math.sin(radLat)
-        magic = 1 - ee * magic * magic
-        #math.sqrtMagic = math.sqrt(magic)
-        #dLat = (dLat * 180.0) / ((a * (1 - ee)) / (magic * math.sqrtMagic) * pi)
-        #dLon = (dLon * 180.0) / (a / math.sqrtMagic * math.cos(radLat) * pi)
-        sqrtMagic = math.sqrt(magic)
-        dLat = (dLat * 180.0) / ((a * (1 - ee)) / (magic * sqrtMagic) * pi)
-        dLon = (dLon * 180.0) / (a / sqrtMagic * math.cos(radLat) * pi)
-        self.Lat_Google = self.GPS_Lat + dLat
-        self.Lon_Google = self.GPS_Lon + dLon
-
-    def L76X_Baidu_Coordinates(self, U_Lat, U_Lon):
-        self.GPS_Lat = U_Lat % 1 *100 / 60 + math.floor(U_Lat)
-        self.GPS_Lon = U_Lon % 1 *100 / 60 + math.floor(U_Lon)
-        self.transform()
-        self.bd_encrypt()
-
-    def L76X_Google_Coordinates(self, U_Lat, U_Lon):
-        self.GPS_Lat = U_Lat % 1 / 60 + U_Lat/1
-        self.GPS_Lon = U_Lon % 1 / 60 + U_Lon/1
-        self.transform()
-
     def L76X_Set_Baudrate(self, Baudrate):
         self.config.Uart_Set_Baudrate(Baudrate)
 
@@ -199,4 +148,4 @@ class L76X(object):
         time.sleep(1)
         self.config.Force.value(0)
         time.sleep(1)
-        self.config.Force = Pin(self.config.FORCE_PIN,Pin.IN)
+        self.config.Force = Pin(self.config.force_pin, Pin.IN)

@@ -32,16 +32,19 @@ class GPS(object):
             gps.L76X_Loop()
             await asyncio.sleep_ms(_DELAY)
 
+    def get_last_updated(self):
+        return self.gps.Last_Updated
+    
     def get_satellites(self):
         return self.gps.Satellites
-    
-    def get_timestamp(self):
-        return self.gps.Timestamp
 
     def get_datetime(self):
         gps = self.gps
         weekday = 0 # Not supported by GPS
         return (gps.Time_Year, gps.Time_Month, gps.Time_Day, weekday, gps.Time_Hours, gps.Time_Minutes, gps.Time_Seconds, gps.Time_Microseconds)
+
+    def get_timestamp(self):
+        return self.gps.Timestamp
 
     def get_coords(self):
         gps = self.gps

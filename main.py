@@ -25,6 +25,10 @@ rtc = RTC()
 display = Display(Pin(18), Pin(19), Pin("LED", Pin.OUT))
 gps = GPS()
 
+pps = Pin(16, Pin.IN)
+pps_ready = False
+pps_last_updated = time.ticks_ms()
+
 format_24hr = SETTINGS_DEFAULTS["format_24hr"]
 timezone = SETTINGS_DEFAULTS["tz"]
 daylight_savings = SETTINGS_DEFAULTS["dst"]
@@ -88,38 +92,65 @@ def _handle_request(request, ip):
 
 # region LOOP_GPS
 async def _loop_gps():
+    global pps, pps_ready, pps_last_updated
+
     last_timestamp = ""
-    last_updated = 0
+
+    pps.irq(trigger=Pin.IRQ_RISING, handler = _handle_pps)
 
     print("\nloop gps")
     display.show("_-^-_-^-_")
 
     while True:
-        delta = time.ticks_diff(time.ticks_ms(), last_updated)
-
-        # Update RTC every RTC_UPDATE_DELAY ms if GPS has a new timestamp
-        if (delta > RTC_UPDATE_DELAY):
-            last_updated = time.ticks_ms()
-            
-            timestamp = gps.get_timestamp()
-            if (timestamp != last_timestamp):
-                last_timestamp = timestamp
-
-                # Set RTC to GPS time
-                rtc.datetime(gps.get_datetime())
-
-                print("\ngps updated")
-                print(f"Time = {timestamp}")
-                print(f"Lat = {gps.get_lat()}, Lon = {gps.get_lon()}")
-                print(f"Satellites = {gps.get_satellites()}")
+        # Wait for PPS diff to be greater than RTC_UPDATE_DELAY so we don't update RTC too often
+        if (pps_ready == False):
+            delta_pps = time.ticks_diff(time.ticks_ms(), pps_last_updated)
+            if (delta_pps > RTC_UPDATE_DELAY):
+                pps_ready = True
 
         # Update display
-        if (last_timestamp != ""):
+        timestamp = gps.get_timestamp()
+        if (timestamp != last_timestamp):
+            # If we haven't set RTC yet, go ahead and use NEMA time 
+            if (last_timestamp == ""):
+                rtc.datetime(gps.get_datetime())
+
+                print("\nnema update")
+                print(f"time = {timestamp}")
+                print(f"lat = {gps.get_lat()}, lon = {gps.get_lon()}")
+                print(f"satellites = {gps.get_satellites()}")
+            
+            last_timestamp = timestamp
+            
             _display_current_time()
         
         # Tick
         await asyncio.sleep_ms(1000)
+
+# Set RTC to GPS time on PPS signal IRQ handler
+def _handle_pps(pin):
+    global pps_ready, pps_last_updated
     
+    # Only update RTC if PPS is ready and delay has passed
+    if (pps_ready == False):
+        return
+    pps_ready = False
+    pps_last_updated = time.ticks_ms()
+
+    # NEMA current time
+    seconds = time.mktime(gps.get_datetime())
+    # Plus difference between now and last NEMA update
+    delta = time.ticks_diff(time.ticks_ms(), gps.get_last_updated())
+    # Plus 1 second for this tick
+    seconds_to_add = (delta // 1000) + 1
+    # Set RTC
+    rtc.datetime(time.localtime(seconds + seconds_to_add))
+
+    print("\npps update")
+    print(f"time = {gps.get_timestamp()}")
+    print(f"lat = {gps.get_lat()}, lon = {gps.get_lon()}")
+    print(f"satellites = {gps.get_satellites()}")
+
 def _display_current_time():
     now = rtc.datetime()
     hours = now[4]

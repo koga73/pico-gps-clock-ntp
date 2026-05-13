@@ -1,15 +1,15 @@
-from machine import UART,Pin
+from machine import UART, Pin
 
-Temp = '0123456789ABCDEF*'
-
-class config(object):
-    FORCE_PIN  = 14
-    STANDBY_PIN= 17
-    def __init__(self, Baudrate = 9600):
-        #self.ser = UART(1,baudrate=9600,tx=Pin(4),rx=Pin(5))
-        self.ser = UART(0,baudrate=9600,tx=Pin(0),rx=Pin(1))
-        self.StandBy = Pin(self.STANDBY_PIN,Pin.OUT)
-        self.Force = Pin(self.FORCE_PIN,Pin.IN)
+class L76_Config(object):
+    def __init__(self, Baudrate = 9600, tx_pin = 0, rx_pin = 1, force_pin = 14, standby_pin = 17):
+        self.tx_pin = tx_pin
+        self.rx_pin = rx_pin
+        self.force_pin = force_pin
+        self.standby_pin = standby_pin
+        
+        self.ser = UART(0, baudrate = Baudrate, tx = Pin(tx_pin) , rx = Pin(rx_pin))
+        self.StandBy = Pin(standby_pin, Pin.OUT)
+        self.Force = Pin(force_pin, Pin.IN)
         self.StandBy.value(0)
         self.Force.value(0)
 
@@ -18,20 +18,13 @@ class config(object):
 
     def Uart_SendString(self, value): 
         self.ser.write(value)
-
-    def Uart_ReceiveByte(self): 
-        return self.ser.read(1)
-
-    def Uart_ReceiveString(self, value): 
-        data = self.ser.read(value)
-        return data
     
+    # Read all available bytes without blocking
     def Uart_ReceiveAll(self):
         ser = self.ser
 
         data = b""
         while ser.any() > 0:
-            # Read available bytes without blocking
             chunk = ser.read(ser.any())
             if chunk:
                 data += chunk
