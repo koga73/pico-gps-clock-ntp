@@ -6,13 +6,13 @@ from lib.daylightsaving import StandardTimePolicy, DaylightSavingPolicy, Dayligh
 # Clock with microsecond precision, timezones and daylight saving time
 class Clock:
     DEFAULT_FORMAT_24HR = False
-    DEFAULT_TZ = -4	# Eastern Time
+    DEFAULT_TZ = -5	# EST
     DEFAULT_DST = "us"
 
     def __init__(self, format_24hr = None, tz = None, dst = None):
         self.time_us = 0
 
-        self._last_time_set = 0
+        self._last_time_set = time.ticks_us()
         self._ds = None
         
         self.init_localtime(format_24hr, tz, dst)

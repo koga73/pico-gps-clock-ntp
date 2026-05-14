@@ -21,7 +21,7 @@ DEFAULT_WIFI = {
     "password": None
 }
 
-CLOCK_UPDATE_DELAY = 30000
+CLOCK_UPDATE_DELAY = 30 * 1000000  # 30 seconds in microseconds
 
 # region GLOBALS
 clock = Clock()
