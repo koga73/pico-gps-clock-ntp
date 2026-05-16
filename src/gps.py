@@ -2,7 +2,7 @@ import asyncio
 
 from lib.l76x import L76X
 
-_DELAY = 250
+_DELAY = 300
 
 class GPS(object):
     # Constructor
@@ -14,6 +14,11 @@ class GPS(object):
     async def loop(self):
         gps = self.gps
         
+        # Increase BAUD rate for faster NMEA parsing
+        gps.L76X_Send_Command(gps.SET_NMEA_BAUDRATE_115200)
+        await asyncio.sleep_ms(1000)
+        gps.L76X_Set_Baudrate(115200)
+
         # Timing
         gps.L76X_Send_Command(gps.SET_POS_FIX_400MS)
         gps.L76X_Send_Command(gps.SET_SYNC_PPS_NMEA_ON)

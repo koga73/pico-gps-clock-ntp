@@ -64,14 +64,13 @@ class L76X(object):
     #Set NMEA sentence output frequencies 
     SET_NMEA_OUTPUT = '$PMTK314,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,1,0'
     #Baud rate
-    SET_NMEA_BAUDRATE          = '$PMTK251'
-    SET_NMEA_BAUDRATE_115200   = '$PMTK251,115200'
-    SET_NMEA_BAUDRATE_57600    = '$PMTK251,57600'
-    SET_NMEA_BAUDRATE_38400    = '$PMTK251,38400'
-    SET_NMEA_BAUDRATE_19200    = '$PMTK251,19200'
-    SET_NMEA_BAUDRATE_14400    = '$PMTK251,14400'
-    SET_NMEA_BAUDRATE_9600     = '$PMTK251,9600'
-    SET_NMEA_BAUDRATE_4800     = '$PMTK251,4800'
+    SET_NMEA_BAUDRATE          = '$PCAS01'
+    SET_NMEA_BAUDRATE_115200   = '$PCAS01,5'
+    SET_NMEA_BAUDRATE_57600    = '$PCAS01,4'
+    SET_NMEA_BAUDRATE_38400    = '$PCAS01,3'
+    SET_NMEA_BAUDRATE_19200    = '$PCAS01,2'
+    SET_NMEA_BAUDRATE_9600     = '$PCAS01,1'
+    SET_NMEA_BAUDRATE_4800     = '$PCAS01,0'
 
     def __init__(self):
         self.config = L76_Config(9600)
@@ -104,13 +103,13 @@ class L76X(object):
         
         s = str(seconds_raw).split(".")
         seconds = int(s[0])
-        microseconds = int(s[1] if len(s) > 1 else "0")
+        microseconds = int(s[1] if len(s) > 1 else "0") * 1000000
 
         # Ensure timestamp has changed
         if (year + 2000, month, day, hours, minutes, seconds, microseconds) == (self.Time_Year, self.Time_Month, self.Time_Day, self.Time_Hours, self.Time_Minutes, self.Time_Seconds, self.Time_Microseconds):
             return
         
-        self.Last_Updated = time.ticks_ms()
+        self.Last_Updated = time.ticks_us()
         self.Time_Year = year + 2000 # GPS returns year as 2 digit format
         self.Time_Month = month
         self.Time_Day = day

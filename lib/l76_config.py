@@ -9,7 +9,7 @@ class L76_Config(object):
         self.force_pin = force_pin
         self.standby_pin = standby_pin
         
-        self.ser = UART(0, baudrate = Baudrate, tx = Pin(tx_pin) , rx = Pin(rx_pin))
+        self.ser = UART(0, baudrate = Baudrate, tx = Pin(tx_pin), rx = Pin(rx_pin))
         self.StandBy = Pin(standby_pin, Pin.OUT)
         self.Force = Pin(force_pin, Pin.IN)
         self.StandBy.value(0)
@@ -33,4 +33,4 @@ class L76_Config(object):
         return data
 
     def Uart_Set_Baudrate(self, Baudrate):
-        self.ser = UART(0,baudrate=Baudrate,tx=Pin(0),rx=Pin(1))
+        self.ser.init(baudrate = Baudrate)

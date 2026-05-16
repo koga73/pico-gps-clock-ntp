@@ -50,8 +50,8 @@ class DaylightSaving:
     def __init__(self, dstp, stdp):
         self.dstp = dstp
         self.stdp = stdp
-        print(self.dstp)
-        print(self.stdp)
+        # print(self.dstp)
+        # print(self.stdp)
 
     def isleapyear(self, year):
         return ( year % 4 == 0 and year % 100 != 0) or year % 400 ==  0
@@ -82,12 +82,12 @@ class DaylightSaving:
         return self.nthweekday(p.week, p.month, p.weekday, p.hour, year)
     
     def localtime(self, utc):
-        print(f'UTC: {self.ftime(utc)}')
+        # print(f'UTC: {self.ftime(utc)}')
         year = utime.gmtime(utc)[0]
         dst = self.gettfromp(self.dstp, year)
-        print(f'Daylight Saving Starts: {self.ftime(dst)}')
+        # print(f'Daylight Saving Starts: {self.ftime(dst)}')
         std = self.gettfromp(self.stdp, year)
-        print(f'Daylight Saving Ends: {self.ftime(std)}')
+        # print(f'Daylight Saving Ends: {self.ftime(std)}')
         saving = False
         if self.stdp.hemisphere:
             # Sourthern hemisphere
@@ -97,7 +97,7 @@ class DaylightSaving:
             saving = utc > dst and utc < std
         offset = self.dstp.timezone if saving else self.stdp.timezone
         local = utc + (offset * 60)
-        print(f'Local: {self.ftime(local)}')
+        # print(f'Local: {self.ftime(local)}')
         return utc + (offset * 60)
     
     def ftime(self, t):

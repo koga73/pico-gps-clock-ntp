@@ -3,7 +3,7 @@ import asyncio
 from lib.tm1637 import TM1637
 
 _DIGITS = 4
-_DELAY = 300
+_DELAY = 350
 
 class Display(object):
     # Constructor
