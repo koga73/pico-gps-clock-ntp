@@ -20,17 +20,16 @@ DEFAULT_WIFI = {
     "password": None
 }
 
-CLOCK_UPDATE_DELAY = 30 * 1000000  # 30 seconds in microseconds
+STATUS_DELAY = 15000
 
 # region GLOBALS
 clock = Clock()
 button = Button(22)
 display = Display(Pin(18), Pin(19), Pin("LED", Pin.OUT))
-gps = GPS()
+gps = GPS(16)
 
-pps = Pin(16, Pin.IN)
-pps_ready = False
-pps_last_updated = time.ticks_us()
+last_timestamp = ""
+last_status_time = 0
 # endregion
 
 # region MODE_DEFAULT
@@ -38,9 +37,6 @@ async def mode_default():
     global format_24hr, timezone, daylight_savings
     
     print("\nmode_default")
-
-    # Start gps loop
-    asyncio.create_task(gps.loop())
 
     # See if we have settings saved
     print("\nsettings")
@@ -102,73 +98,45 @@ def _handle_request(request, ip):
 
 # region LOOP_DEFAULT
 async def _loop_default():
-    global pps, pps_ready, pps_last_updated
-
-    pps.irq(trigger=Pin.IRQ_RISING, handler = _handle_pps)
-
-    print("\nloop default")
-    display.show("_-^-_-^-_")
+    global last_timestamp, last_status_time
     
-    last_timestamp = ""
-
+    print("\nloop default")
+    display.show("^^^^----____----^^^^")
+    
     while True:
+        now_ms = time.ticks_ms()
+
         # If our check button function returns true, break
-        if (button.loop_button(time.ticks_ms(), button.default_released, button.default_held)):
+        if (button.loop_button(now_ms, button.default_released, button.default_held)):
             break
+        
+        # Try to receive GPS data on PPS signal
+        gps.try_receive()
 
-        # Wait for PPS diff to be greater than CLOCK_UPDATE_DELAY so we don't update Clock too often
-        if (pps_ready == False):
-            delta_pps = time.ticks_diff(time.ticks_us(), pps_last_updated)
-            
-            if (delta_pps > CLOCK_UPDATE_DELAY):
-                pps_ready = True
+        # If we have a new GPS timestamp, update the clock and display
+        timestamp = gps.get_timestamp()
+        if (timestamp != last_timestamp):
+            last_timestamp = timestamp
 
-            # NEMA update if we have a timestamp and PPS is not ready yet
-            if (last_timestamp == ""):
-                timestamp = gps.get_timestamp()
-                if (timestamp != ""):
-                    last_timestamp = timestamp
-                    
-                    clock.set_datetime(gps.get_datetime())
+            # Update Clock with GPS time on PPS signal
+            clock.set_datetime(gps.get_datetime(), gps.get_last_pps_tick())
 
-                    print("\nnema update")
-                    print(f"time = {timestamp}")
-                    print(f"lat = {gps.get_lat()}, lon = {gps.get_lon()}")
-                    print(f"satellites = {gps.get_satellites()}")
+            # Periodic update
+            colon = True
+            if (time.ticks_diff(now_ms, last_status_time) > STATUS_DELAY):
+                last_status_time = now_ms
+                colon = False
+
+                print("\ngps status")
+                print(f"time = {gps.get_timestamp()}")
+                print(f"lat = {gps.get_lat()}, lon = {gps.get_lon()}")
+                print(f"satellites = {gps.get_satellites()}")
+
+            # Display
+            _display_current_time(colon)
 
         # Tick
-        await asyncio.sleep_ms(250)
-# endregion
-
-# region PPS
-# Set Clock to GPS time on PPS signal IRQ handler
-def _handle_pps(pin):
-    global pps_ready, pps_last_updated
-    
-    # Only update Clock if PPS is ready and delay has passed
-    if (pps_ready == True):
-        pps_ready = False
-
-        ticks_now = time.ticks_us()
-        pps_last_updated = ticks_now
-        
-        # NEMA current time
-        dt = gps.get_datetime()
-        # Plus difference between now and last NEMA update
-        delta = time.ticks_diff(ticks_now, gps.get_last_updated())
-        # Plus 1 second for this tick
-        offset = delta + 1000000
-        # Set Clock time to GPS time plus delta
-        clock.set_datetime(dt, offset, ticks_now)
-        
-        print("\npps update")
-        print(f"time = {gps.get_timestamp()}")
-        print(f"lat = {gps.get_lat()}, lon = {gps.get_lon()}")
-        print(f"satellites = {gps.get_satellites()}")
-
-        _display_current_time(False)
-    else:
-        _display_current_time(True)
+        await asyncio.sleep_ms(100)
 # endregion
 
 # region DISPLAY
@@ -239,6 +207,9 @@ async def main():
     # Start display loop
     asyncio.create_task(display.loop())
     display.show("----")
+
+    # Initialize GPS
+    await gps.init()
 
     # Reset wlan interfaces
     await wlan_reset()

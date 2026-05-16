@@ -1,35 +1,58 @@
 import asyncio
+import time
+from machine import Pin
 
 from lib.l76x import L76X
 
-_DELAY = 300
-
-class GPS(object):
+class GPS():
     # Constructor
-    def __init__(self):
-        self.gps = L76X()
-        self.gps.L76X_Set_Baudrate(9600)
+    def __init__(self, pps_pin = 16):
+        self.pps_pin = pps_pin
 
-    # Scroll during loop
-    async def loop(self):
-        gps = self.gps
-        
+        self._pps_ready = False
+        self._pps_tick = time.ticks_us()
+
+    async def init(self):
+        gps = L76X()
+        gps.L76X_Set_Baudrate(9600)
+        await asyncio.sleep_ms(1000)
+
         # Increase BAUD rate for faster NMEA parsing
         gps.L76X_Send_Command(gps.SET_NMEA_BAUDRATE_115200)
         await asyncio.sleep_ms(1000)
         gps.L76X_Set_Baudrate(115200)
 
         # Timing
-        gps.L76X_Send_Command(gps.SET_POS_FIX_400MS)
-        gps.L76X_Send_Command(gps.SET_SYNC_PPS_NMEA_ON)
-        
+        gps.L76X_Send_Command(gps.SET_POS_FIX_200MS)
+        gps.L76X_Send_Command(gps.SET_PPS_ON)
+
         # Output format
         gps.L76X_Send_Command(gps.SET_NMEA_OUTPUT)
+        gps.L76X_Send_Command(gps.SET_NAV_MODE_STATIONARY)
         gps.L76X_Exit_BackupMode()
+
+        self.gps = gps
+
+        pps = Pin(self.pps_pin, Pin.IN)
+        pps.irq(trigger = Pin.IRQ_RISING, handler = self._handle_pps)
+
+    # PPS signal IRQ handler
+    def _handle_pps(self, _pin):
+        # If we are already true then the last message was not processed - so clear the buffer
+        if (self._pps_ready == True):
+            self.gps.L76X_Flush()
+        
+        self._pps_ready = True
+        self._pps_tick = time.ticks_us()
     
-        while True:
-            gps.L76X_Loop()
-            await asyncio.sleep_ms(_DELAY)
+    # Call from main loop
+    def try_receive(self):
+        if (self._pps_ready == True):
+            self._pps_ready = False
+            self.gps.L76X_Receive()
+
+    def get_last_pps_tick(self):
+        return self._pps_tick
 
     def get_last_updated(self):
         return self.gps.Last_Updated
