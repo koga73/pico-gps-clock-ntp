@@ -24,45 +24,46 @@ class L76X(object):
     Lat = 0.0
     
     Satellites = 0
-    
+
+    # $PMTK Commands are for MediaTek, but the L76X uses $PCAS commands
+    # https://raw.githubusercontent.com/Seeed-Projects/Seeed_L76K-GNSS_for_XIAO/fb74b715224e0ac153c3884e578ee8e024ed8946/docs/Quectel_L76K_GNSS_Protocol_Specification_V1.1.pdf
+
     #Startup mode
-    SET_HOT_START       = '$PMTK101'
-    SET_WARM_START      = '$PMTK102'
-    SET_COLD_START      = '$PMTK103'
-    SET_FULL_COLD_START = '$PMTK104'
+    # SET_HOT_START       = '$PMTK101'
+    # SET_WARM_START      = '$PMTK102'
+    # SET_COLD_START      = '$PMTK103'
+    # SET_FULL_COLD_START = '$PMTK104'
 
     #Standby mode -- Exit requires high level trigger
-    SET_PERPETUAL_STANDBY_MODE      = '$PMTK161'
+    # SET_PERPETUAL_STANDBY_MODE      = '$PMTK161'
 
-    SET_PERIODIC_MODE               = '$PMTK225'
-    SET_NORMAL_MODE                 = '$PMTK225,0'
-    SET_PERIODIC_BACKUP_MODE        = '$PMTK225,1,1000,2000'
-    SET_PERIODIC_STANDBY_MODE       = '$PMTK225,2,1000,2000'
-    SET_PERPETUAL_BACKUP_MODE       = '$PMTK225,4'
-    SET_ALWAYSLOCATE_STANDBY_MODE   = '$PMTK225,8'
-    SET_ALWAYSLOCATE_BACKUP_MODE    = '$PMTK225,9'
+    # SET_PERIODIC_MODE               = '$PMTK225'
+    # SET_NORMAL_MODE                 = '$PMTK225,0'
+    # SET_PERIODIC_BACKUP_MODE        = '$PMTK225,1,1000,2000'
+    # SET_PERIODIC_STANDBY_MODE       = '$PMTK225,2,1000,2000'
+    # SET_PERPETUAL_BACKUP_MODE       = '$PMTK225,4'
+    # SET_ALWAYSLOCATE_STANDBY_MODE   = '$PMTK225,8'
+    # SET_ALWAYSLOCATE_BACKUP_MODE    = '$PMTK225,9'
 
     #Set the message interval,100ms~10000ms
-    SET_POS_FIX         = '$PMTK220'
-    SET_POS_FIX_100MS   = '$PMTK220,100'
-    SET_POS_FIX_200MS   = '$PMTK220,200'
-    SET_POS_FIX_400MS   = '$PMTK220,400'
-    SET_POS_FIX_800MS   = '$PMTK220,800'
-    SET_POS_FIX_1S      = '$PMTK220,1000'
-    SET_POS_FIX_2S      = '$PMTK220,2000'
-    SET_POS_FIX_4S      = '$PMTK220,4000'
-    SET_POS_FIX_8S      = '$PMTK220,8000'
-    SET_POS_FIX_10S     = '$PMTK220,10000'
+    SET_POS_FIX         = '$PCAS02'
+    SET_POS_FIX_200MS   = '$PCAS02,200'
+    SET_POS_FIX_500MS   = '$PCAS02,500'
+    SET_POS_FIX_1S      = '$PCAS02,1000'
 
     #Switching time output
-    SET_SYNC_PPS_NMEA_OFF   = '$PMTK255,0'
-    SET_SYNC_PPS_NMEA_ON    = '$PMTK255,1'
+    # SET_SYNC_PPS_NMEA_OFF   = '$PMTK255,0'
+    # SET_SYNC_PPS_NMEA_ON    = '$PMTK255,1'
+    SET_PPS_OFF = '$PCAS07,0'
+    SET_PPS_ON  = '$PCAS07,1'
 
     #To restore the system default setting
-    SET_REDUCTION               = '$PMTK314,-1'
+    # SET_REDUCTION               = '$PMTK314,-1'
 
     #Set NMEA sentence output frequencies 
-    SET_NMEA_OUTPUT = '$PMTK314,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,1,0'
+    # GGA, GLL, GSA, GSV, RMC, VTG, ZDA, ANT
+    SET_NMEA_OUTPUT = '$PCAS03,1,1,1,1,1,1,1,1,0,0,,,0,0'
+    
     #Baud rate
     SET_NMEA_BAUDRATE          = '$PCAS01'
     SET_NMEA_BAUDRATE_115200   = '$PCAS01,5'
@@ -71,6 +72,12 @@ class L76X(object):
     SET_NMEA_BAUDRATE_19200    = '$PCAS01,2'
     SET_NMEA_BAUDRATE_9600     = '$PCAS01,1'
     SET_NMEA_BAUDRATE_4800     = '$PCAS01,0'
+
+    # Navigation Mode
+    # 1 = Portable/Pedestrian; 2 = Stationary; 3 = Vehicle/Automotive.
+    SET_NAV_MODE_PORTABLE = '$PCAS11,1'
+    SET_NAV_MODE_STATIONARY = '$PCAS11,2'
+    SET_NAV_MODE_VEHICLE = '$PCAS11,3'
 
     def __init__(self):
         self.config = L76_Config(9600)
@@ -87,15 +94,19 @@ class L76X(object):
         self.config.Uart_SendByte('\r')
         self.config.Uart_SendByte('\n')
         # print(data)
-    
-    # Read from GPS UART, parse and update time
-    def L76X_Loop(self):
+
+    # Clear the GPS UART buffer
+    def L76X_Flush(self):
         raw_data = self.config.Uart_ReceiveAll()
         if raw_data is None:
-            return
+            return False
         for b in raw_data:
             try: self.parser.update(chr(b))
             except: continue
+    
+    # Read from GPS UART, parse and update time
+    def L76X_Receive(self):
+        self.L76X_Flush()
         
         # Update time
         day, month, year = self.parser.date
@@ -103,11 +114,11 @@ class L76X(object):
         
         s = str(seconds_raw).split(".")
         seconds = int(s[0])
-        microseconds = int(s[1] if len(s) > 1 else "0") * 1000000
+        microseconds = int(s[1] if len(s) > 1 else "0")
 
         # Ensure timestamp has changed
-        if (year + 2000, month, day, hours, minutes, seconds, microseconds) == (self.Time_Year, self.Time_Month, self.Time_Day, self.Time_Hours, self.Time_Minutes, self.Time_Seconds, self.Time_Microseconds):
-            return
+        if (year + 2000, month, day, hours, minutes, seconds, microseconds * 1000000) == (self.Time_Year, self.Time_Month, self.Time_Day, self.Time_Hours, self.Time_Minutes, self.Time_Seconds, self.Time_Microseconds):
+            return False
         
         self.Last_Updated = time.ticks_us()
         self.Time_Year = year + 2000 # GPS returns year as 2 digit format
@@ -116,7 +127,7 @@ class L76X(object):
         self.Time_Hours = hours
         self.Time_Minutes = minutes
         self.Time_Seconds = seconds
-        self.Time_Microseconds = microseconds
+        self.Time_Microseconds = microseconds * 1000000
         self.Timestamp = self._timestamp(year, month, day, hours, minutes, seconds, microseconds)
 
         # Update coordinates
@@ -125,6 +136,8 @@ class L76X(object):
         
         # Update satellites
         self.Satellites = self.parser.satellites_in_use
+
+        return True
     
     def _timestamp(self, year, month, day, hours, minutes, seconds, microseconds = 0):
         # Ensure we have date

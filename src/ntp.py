@@ -37,11 +37,12 @@ async def start_udp(protocol, host, port, time_func):
 
 async def _udp_loop(protocol, transport, time_func):
     while True:
-        await asyncio.sleep_ms(100)
+        await asyncio.sleep_ms(50)
         
         try:
             data, addr = transport.recvfrom(48)
-            protocol.datagram_received(data, addr, time_func)
+            recv_time = time_func()  # T2: capture receive timestamp immediately
+            protocol.datagram_received(data, addr, time_func, recv_time)
         
         except OSError as e:
             # If transport is closed, break the loop
@@ -52,14 +53,14 @@ class NtpProtocol():
     def __init__(self, transport):
         self.transport = transport
 
-    def datagram_received(self, data, addr, time_func):
+    def datagram_received(self, data, addr, time_func, recv_time):
         # NTP packages are ALWAYS 48 bytes
         if (len(data) != 48):
             raise ValueError("invalid ntp packet length: " + str(len(data)))
         
-        self.process_packet(data, addr, time_func)
+        self.process_packet(data, addr, time_func, recv_time)
     
-    def process_packet(self, data, addr, time_func):
+    def process_packet(self, data, addr, time_func, recv_time):
         print(f"\nntp request from {addr[0]}")
 
         # Extract Client Transmit Timestamp (bytes 40-47 in request)
@@ -68,11 +69,11 @@ class NtpProtocol():
         # Mirror the version number from the client request (bits 5-3 of byte 0)
         client_vn = (data[0] >> 3) & 0x7
 
-        # Get current time and convert to NTP time
-        # int() is required: time_func() may return a float, and ustruct.pack("!I", float)
-        # raises TypeError in MicroPython, which would silently kill the async task
-        current_seconds = time_func() + _EPOCH_OFFSET
-        # print(current_seconds)
+        # T2: Receive timestamp — captured at recvfrom, before any processing delay
+        recv_seconds, recv_frac = recv_time
+        recv_ntp_sec = recv_seconds + _EPOCH_OFFSET
+        # Convert fractional microseconds to NTP fraction (2^32 / 1_000_000 ≈ 4294.967)
+        recv_ntp_frac = recv_frac * 4295
 
         # Construct NTP Response Packet (48 bytes)
         response = bytearray(48)
@@ -81,20 +82,28 @@ class NtpProtocol():
         response[2] = POLL_INTERVAL             # Poll interval
         response[3] = PRECISION & 0xFF          # Precision encoded to fit in a byte
 
-        # Root Delay & Root Dispersion (4 bytes each, set to 0)
-        response[12:16] = b'LOCL' # Reference ID (4 bytes, e.g., 'LOCL')
+        # Reference ID
+        response[12:16] = b'GPSD'
 
-        # Reference Timestamp (last time synced, approximation)
-        response[16:20] = ustruct.pack("!I", current_seconds)
+        # Reference Timestamp (last time synced, approximation: same as receive)
+        response[16:20] = ustruct.pack("!I", recv_ntp_sec)
+        response[20:24] = ustruct.pack("!I", recv_ntp_frac)
         
-        # Origin Timestamp from client
+        # Origin Timestamp (echo client transmit)
         response[24:32] = client_transmit_timestamp
 
-        # Receive Timestamp (when packet arrived at server)
-        response[32:36] = ustruct.pack("!I", current_seconds)
+        # Receive Timestamp (T2: when packet arrived at server)
+        response[32:36] = ustruct.pack("!I", recv_ntp_sec)
+        response[36:40] = ustruct.pack("!I", recv_ntp_frac)
 
-        # Transmit Timestamp (when packet leaves server)
-        response[40:44] = ustruct.pack("!I", current_seconds)
+        # T3: Transmit timestamp — captured just before sending to exclude server processing time
+        xmit_seconds, xmit_frac = time_func()
+        xmit_ntp_sec = xmit_seconds + _EPOCH_OFFSET
+        xmit_ntp_frac = xmit_frac * 4295
+
+        # Transmit Timestamp (T3: when packet leaves server)
+        response[40:44] = ustruct.pack("!I", xmit_ntp_sec)
+        response[44:48] = ustruct.pack("!I", xmit_ntp_frac)
 
         # Send packet back to client
         self.transport.sendto(response, addr)
